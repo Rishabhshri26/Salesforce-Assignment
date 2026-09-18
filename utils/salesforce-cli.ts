@@ -14,6 +14,7 @@ interface OrgDisplayResult {
   instanceUrl?: string;
   username?: string;
   alias?: string;
+  apiVersion?: string;
 }
 
 interface AccessTokenResult {
@@ -24,6 +25,7 @@ export interface SalesforceOrgAuth {
   alias: string;
   username: string;
   instanceUrl: string;
+  apiVersion: string;
   accessToken: string;
 }
 
@@ -31,6 +33,7 @@ export interface SalesforceOrgDetails {
   alias: string;
   username: string;
   instanceUrl: string;
+  apiVersion: string;
 }
 
 function getTargetOrg(): string {
@@ -120,15 +123,14 @@ export async function getSalesforceOrgDetails(): Promise<SalesforceOrgDetails> {
     '--json',
   ]);
 
-  const response =
-    parseCliJson<OrgDisplayResult>(
-      stdout,
-      'sf org display'
-    );
+  const orgDisplay = parseCliJson<OrgDisplayResult>(
+    stdout,
+    'sf org display'
+  );
 
   if (
-    response.status !== 0 ||
-    !response.result?.instanceUrl
+    orgDisplay.status !== 0 ||
+    !orgDisplay.result?.instanceUrl
   ) {
     throw new Error(
       `Unable to retrieve Salesforce org information for "${targetOrg}".`
@@ -136,9 +138,10 @@ export async function getSalesforceOrgDetails(): Promise<SalesforceOrgDetails> {
   }
 
   return {
-    alias: response.result.alias ?? targetOrg,
-    username: response.result.username ?? '',
-    instanceUrl: response.result.instanceUrl,
+    alias: orgDisplay.result.alias ?? targetOrg,
+    username: orgDisplay.result.username ?? '',
+    instanceUrl: orgDisplay.result.instanceUrl,
+    apiVersion: orgDisplay.result.apiVersion ?? '',
   };
 }
 
@@ -175,6 +178,7 @@ export async function getSalesforceOrgAuth(): Promise<SalesforceOrgAuth> {
     alias: orgDetails.alias,
     username: orgDetails.username,
     instanceUrl: orgDetails.instanceUrl,
+    apiVersion: orgDetails.apiVersion,
     accessToken: tokenResponse.result.accessToken,
   };
 }
