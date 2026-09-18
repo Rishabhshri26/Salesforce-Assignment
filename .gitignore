@@ -1,0 +1,15 @@
+node_modules/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+.env
+.env.*
+!.env.example
+
+auth/
+storage/
+*.log
+
+.DS_Store
