@@ -10,6 +10,7 @@ playwright/.cache/
 
 auth/
 storage/
+playwright/.auth/
 *.log
 
 .DS_Store

@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'node:path';
+
+const authFile = path.resolve('playwright/.auth/user.json');
 
 export default defineConfig({
   testDir: './tests',
@@ -17,21 +20,27 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.SF_INSTANCE_URL,
-
     trace: 'retain-on-failure',
-
     screenshot: 'only-on-failure',
-
     video: 'retain-on-failure',
   },
 
   projects: [
     {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
+    },
+
+    {
       name: 'chromium',
+      testMatch: /.*\.spec\.ts/,
+
       use: {
         ...devices['Desktop Chrome'],
+        storageState: authFile,
       },
+
+      dependencies: ['setup'],
     },
   ],
 });
