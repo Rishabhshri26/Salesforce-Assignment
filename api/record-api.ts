@@ -103,3 +103,16 @@ export async function findAccountsByName(
 
   return response.records;
 }
+
+export async function findOpportunitiesByName(
+  client: SalesforceClient,
+  name: string
+): Promise<OpportunityRecord[]> {
+  const response = await client.query<OpportunityRecord>(
+    `SELECT Id, Name, Amount, StageName, CloseDate, AccountId
+     FROM Opportunity
+     WHERE Name = '${name}'`
+  );
+
+  return response.records;
+}
