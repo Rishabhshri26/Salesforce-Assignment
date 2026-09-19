@@ -78,3 +78,28 @@ export async function getOpportunity(
 
   return record;
 }
+
+export async function createAccount(
+  client: SalesforceClient,
+  name: string
+): Promise<AccountRecord> {
+  const id = await client.create('Account', {
+    Name: name,
+  });
+
+  return {
+    Id: id,
+    Name: name,
+  };
+}
+
+export async function findAccountsByName(
+  client: SalesforceClient,
+  name: string
+): Promise<AccountRecord[]> {
+  const response = await client.query<AccountRecord>(
+    `SELECT Id, Name FROM Account WHERE Name = '${name}'`
+  );
+
+  return response.records;
+}

@@ -34,9 +34,10 @@ export class LeadPage {
   }
 
  async confirmConversion(): Promise<void> {
-  await this.page
-    .getByRole('button', { name: 'Convert', exact: true })
-    .click();
+    await this.page
+  .getByRole('button', { name: 'Convert', exact: true })
+  .last()
+  .click();
 
   await expect(
     this.page.getByRole('heading', {
@@ -65,5 +66,28 @@ export class LeadPage {
       exact: true,
     })
   ).toBeVisible();
+}
+
+async chooseExistingAccount(accountName: string): Promise<void> {
+  await this.page
+    .locator('label')
+    .filter({ hasText: 'Choose Existing Account' })
+    .click();
+
+  const accountSearch = this.page.getByRole('combobox', {
+    name: 'Account Search',
+  });
+
+  await accountSearch.fill(accountName);
+
+  const accountOption = this.page.getByRole('option', {
+    name: new RegExp(`^${accountName.slice(0, 20)}`),
+  });
+
+  await expect(accountOption).toBeVisible({ timeout: 10000 });
+  await accountOption.click();
+
+  // The autocomplete option must disappear after the Account is selected.
+  await expect(accountOption).toBeHidden({ timeout: 10000 });
 }
 }

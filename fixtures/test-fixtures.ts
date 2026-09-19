@@ -1,4 +1,6 @@
 import { test as base, type TestInfo } from '@playwright/test';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 import {
   getSalesforceOrgAuth,
@@ -30,6 +32,15 @@ const cleanupPriority: Record<string, number> = {
   Lead: 4,
 };
 
+async function readSalesforceAuth(): Promise<SalesforceOrgAuth> {
+  const authFile = path.resolve(
+    'playwright/.auth/salesforce-auth.json'
+  );
+
+  const content = await fs.readFile(authFile, 'utf-8');
+  return JSON.parse(content) as SalesforceOrgAuth;
+}
+
 export const test = base.extend<Fixtures, WorkerFixtures>({
   /*
    * One Salesforce API client per Playwright worker.
@@ -40,7 +51,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
    */
   salesforceClient: [
   async ({}, use) => {
-    const auth = await getSalesforceOrgAuth();
+    const auth = await readSalesforceAuth();
     const client = await SalesforceClient.create(auth);
 
     await use(client);
@@ -54,7 +65,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 ],
 
   salesforceAuth: async ({}, use) => {
-    await use(await getSalesforceOrgAuth());
+    await use(await readSalesforceAuth());
   },
 
   /*
