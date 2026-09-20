@@ -21,6 +21,7 @@ test('converts a lead into an existing account', async ({
   const accountName = uniqueValue('PW-Existing-Account');
 
   const account = await createAccount(salesforceClient, accountName);
+
   createdRecords.add('Account', account.Id);
 
   const leadData = createLeadTestData();

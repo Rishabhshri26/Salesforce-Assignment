@@ -1,4 +1,4 @@
-import { SalesforceClient } from './salesforce-client';
+import type { SalesforceClient } from './salesforce-client';
 
 export interface LeadTestData {
   firstName: string;
@@ -7,16 +7,16 @@ export interface LeadTestData {
   email: string;
 }
 
-export interface LeadRecord extends LeadTestData {
+export interface LeadRecord {
   id: string;
 }
 
 export interface SalesforceLead {
   Id: string;
-  FirstName: string;
+  FirstName: string | null;
   LastName: string;
   Company: string;
-  Email: string;
+  Email: string | null;
   Status: string;
   IsConverted: boolean;
   ConvertedAccountId: string | null;
@@ -28,29 +28,18 @@ export async function createLead(
   client: SalesforceClient,
   data: LeadTestData
 ): Promise<LeadRecord> {
-  /*
-   * Resolve a valid non-converted Lead status from the target org instead
-   * of hard-coding a status value that may differ between Salesforce orgs.
-   */
-  const statusResult = await client.query<{
-    MasterLabel: string;
-    IsConverted: boolean;
-  }>(
-    `
-      SELECT MasterLabel, IsConverted
-      FROM LeadStatus
-      WHERE IsConverted = false
-      ORDER BY SortOrder
-      LIMIT 1
-    `
+  const statusResponse = await client.query<{ MasterLabel: string }>(
+    `SELECT MasterLabel
+     FROM LeadStatus
+     WHERE IsConverted = false
+     ORDER BY SortOrder
+     LIMIT 1`
   );
 
-  const status = statusResult.records[0]?.MasterLabel;
+  const status = statusResponse.records[0]?.MasterLabel;
 
   if (!status) {
-    throw new Error(
-      'No non-converted Lead status is available in the target Salesforce org.'
-    );
+    throw new Error('No valid unconverted Lead status was found.');
   }
 
   const id = await client.create('Lead', {
@@ -63,7 +52,6 @@ export async function createLead(
 
   return {
     id,
-    ...data,
   };
 }
 
@@ -72,32 +60,30 @@ export async function getLead(
   leadId: string
 ): Promise<SalesforceLead> {
   if (!/^[a-zA-Z0-9]{15,18}$/.test(leadId)) {
-    throw new Error(`Invalid Salesforce Lead ID: "${leadId}"`);
+    throw new Error(`Invalid Salesforce Lead ID: ${leadId}`);
   }
 
-  const result = await client.query<SalesforceLead>(
-    `
-      SELECT
-        Id,
-        FirstName,
-        LastName,
-        Company,
-        Email,
-        Status,
-        IsConverted,
-        ConvertedAccountId,
-        ConvertedContactId,
-        ConvertedOpportunityId
-      FROM Lead
-      WHERE Id = '${leadId}'
-      LIMIT 1
-    `
+  const response = await client.query<SalesforceLead>(
+    `SELECT
+       Id,
+       FirstName,
+       LastName,
+       Company,
+       Email,
+       Status,
+       IsConverted,
+       ConvertedAccountId,
+       ConvertedContactId,
+       ConvertedOpportunityId
+     FROM Lead
+     WHERE Id = '${leadId}'
+     LIMIT 1`
   );
 
-  const lead = result.records[0];
+  const lead = response.records[0];
 
   if (!lead) {
-    throw new Error(`Lead "${leadId}" was not found.`);
+    throw new Error(`Lead ${leadId} was not found.`);
   }
 
   return lead;

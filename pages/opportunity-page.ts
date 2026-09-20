@@ -32,50 +32,61 @@ export class OpportunityPage {
 
     await stageField.click();
 
-    await expect(
-      this.page.getByText(stage, { exact: true })
-    ).toBeVisible({ timeout: 5000 });
+    const stageListbox = this.page.locator(
+      '[role="listbox"]:visible'
+    );
 
-    await this.page
-      .getByText(stage, { exact: true })
-      .click();
+    await expect(stageListbox).toHaveCount(1, {
+      timeout: 10000,
+    });
+
+    const stageOption = stageListbox.getByRole('option', {
+      name: stage,
+      exact: true,
+    });
+
+    await expect(stageOption).toBeVisible({
+      timeout: 10000,
+    });
+
+    await stageOption.click();
 
     await this.page
       .getByRole('button', { name: 'Save', exact: true })
       .click();
   }
 
-async advanceToStage(stage: string): Promise<void> {
-  const stageLink = this.page
-    .locator('a')
-    .filter({ hasText: stage });
+  async advanceToStage(stage: string): Promise<void> {
+    const stageLink = this.page
+      .locator('a')
+      .filter({ hasText: stage });
 
-  await expect(stageLink).toBeVisible({
-    timeout: 10000,
-  });
+    await expect(stageLink).toBeVisible({
+      timeout: 10000,
+    });
 
-  await stageLink.click();
+    await stageLink.click();
 
-  const markCurrentStageButton = this.page.getByRole('button', {
-    name: 'Mark as Current Stage',
-    exact: true,
-  });
-
-  await expect(markCurrentStageButton).toBeVisible({
-    timeout: 10000,
-  });
-
-  await markCurrentStageButton.click();
-
-  // After promotion, Salesforce changes the action to
-  // "Mark Stage as Complete" for the new current stage.
-  await expect(
-    this.page.getByRole('button', {
-      name: 'Mark Stage as Complete',
+    const markCurrentStageButton = this.page.getByRole('button', {
+      name: 'Mark as Current Stage',
       exact: true,
-    })
-  ).toBeVisible({
-    timeout: 10000,
-  });
-}
+    });
+
+    await expect(markCurrentStageButton).toBeVisible({
+      timeout: 10000,
+    });
+
+    await markCurrentStageButton.click();
+
+    // After promotion, Salesforce changes the action to
+    // "Mark Stage as Complete" for the new current stage.
+    await expect(
+      this.page.getByRole('button', {
+        name: 'Mark Stage as Complete',
+        exact: true,
+      })
+    ).toBeVisible({
+      timeout: 10000,
+    });
+  }
 }

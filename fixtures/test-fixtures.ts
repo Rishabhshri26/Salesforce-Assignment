@@ -3,7 +3,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-  getSalesforceOrgAuth,
   type SalesforceOrgAuth,
 } from '../utils/salesforce-cli';
 import { SalesforceClient } from '../api/salesforce-client';
@@ -28,8 +27,8 @@ type WorkerFixtures = {
 const cleanupPriority: Record<string, number> = {
   Opportunity: 1,
   Contact: 2,
-  Account: 3,
-  Lead: 4,
+  Lead: 3,
+  Account: 4,
 };
 
 async function readSalesforceAuth(): Promise<SalesforceOrgAuth> {
@@ -38,6 +37,7 @@ async function readSalesforceAuth(): Promise<SalesforceOrgAuth> {
   );
 
   const content = await fs.readFile(authFile, 'utf-8');
+
   return JSON.parse(content) as SalesforceOrgAuth;
 }
 
@@ -45,40 +45,49 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
   /*
    * One Salesforce API client per Playwright worker.
    *
-   * The client is stateless from the test perspective, so a worker-scoped
-   * instance avoids repeatedly creating API request contexts while keeping
-   * workers independent.
+   * SalesforceClient owns an API request context, so keeping one client
+   * per worker avoids repeatedly creating request contexts while keeping
+   * workers isolated from one another.
    */
   salesforceClient: [
-  async ({}, use) => {
-    const auth = await readSalesforceAuth();
-    const client = await SalesforceClient.create(auth);
+    async ({}, use) => {
+      const auth = await readSalesforceAuth();
+      const client = await SalesforceClient.create(auth);
 
-    await use(client);
+      await use(client);
 
-    await client.close();
-  },
-  {
-    scope: 'worker',
-    timeout: 60000,
-  },
-],
+      await client.close();
+    },
+    {
+      scope: 'worker',
+      timeout: 60000,
+    },
+  ],
 
   salesforceAuth: async ({}, use) => {
     await use(await readSalesforceAuth());
   },
 
   /*
-   * Tracks records created by an individual test.
+   * Tracks every record created by an individual test and removes it
+   * during teardown, whether the test passes or fails.
    *
-   * Converted Leads are irreversible. During teardown we therefore resolve
-   * their generated Account, Contact and Opportunity IDs and clean up those
-   * records, while deliberately leaving the converted Lead itself in place.
+   * Converted Leads cannot be reverted, but Salesforce permits them to
+   * be deleted through the public API. We therefore resolve the records
+   * produced by conversion before cleanup and then delete all records in
+   * dependency order.
    */
-  createdRecords: async ({ salesforceClient }, use, testInfo: TestInfo) => {
+  createdRecords: async (
+    { salesforceClient },
+    use,
+    testInfo: TestInfo
+  ) => {
     const records: CreatedRecord[] = [];
 
-    const add = (objectName: string, recordId: string): void => {
+    const add = (
+      objectName: string,
+      recordId: string
+    ): void => {
       const alreadyTracked = records.some(
         (record) =>
           record.objectName === objectName &&
@@ -95,15 +104,11 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 
     await use({ add });
 
-    const cleanupRecords = [...records];
-    const convertedLeadIds = new Set<string>();
     const cleanupErrors: string[] = [];
 
     /*
-     * A successful Lead conversion creates Account, Contact and Opportunity
-     * records whose IDs are stored on the Lead. Resolve those IDs before
-     * cleanup so they are still available even if the test failed immediately
-     * after conversion.
+     * Resolve conversion-generated records before deleting anything.
+     * Converted Lead IDs hold the Account, Contact and Opportunity IDs.
      */
     for (const record of records) {
       if (record.objectName !== 'Lead') {
@@ -117,8 +122,6 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         );
 
         if (lead.IsConverted) {
-          convertedLeadIds.add(record.recordId);
-
           if (lead.ConvertedOpportunityId) {
             add(
               'Opportunity',
@@ -153,48 +156,36 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     }
 
     /*
-     * Rebuild the list after discovering conversion-generated records.
+     * Delete child/dependent records first.
+     *
+     * Opportunity and Contact are deleted before the Lead.
+     * The Lead is then deleted before the Account so the converted
+     * Lead relationship does not prevent Account cleanup.
      */
-    cleanupRecords.length = 0;
-    cleanupRecords.push(...records);
+    const uniqueCleanupRecords = records
+      .filter(
+        (record, index, allRecords) =>
+          index ===
+          allRecords.findIndex(
+            (candidate) =>
+              candidate.objectName === record.objectName &&
+              candidate.recordId === record.recordId
+          )
+      )
+      .sort((a, b) => {
+        const priorityA =
+          cleanupPriority[a.objectName] ?? 10;
+        const priorityB =
+          cleanupPriority[b.objectName] ?? 10;
 
-    /*
-     * Delete dependent records before their parent Account.
-     * Converted Leads are intentionally excluded because Salesforce does
-     * not allow a converted Lead to be reverted/deleted.
-     */
-    cleanupRecords.sort((a, b) => {
-      const priorityA = cleanupPriority[a.objectName] ?? 10;
-      const priorityB = cleanupPriority[b.objectName] ?? 10;
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
 
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-
-      return 0;
-    });
-
-    /*
-     * Remove duplicates after conversion discovery.
-     */
-    const uniqueCleanupRecords = cleanupRecords.filter(
-      (record, index, allRecords) =>
-        index ===
-        allRecords.findIndex(
-          (candidate) =>
-            candidate.objectName === record.objectName &&
-            candidate.recordId === record.recordId
-        )
-    );
+        return a.recordId.localeCompare(b.recordId);
+      });
 
     for (const record of uniqueCleanupRecords) {
-      if (
-        record.objectName === 'Lead' &&
-        convertedLeadIds.has(record.recordId)
-      ) {
-        continue;
-      }
-
       try {
         await salesforceClient.delete(
           record.objectName,

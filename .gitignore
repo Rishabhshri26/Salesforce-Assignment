@@ -13,4 +13,7 @@ storage/
 playwright/.auth/
 *.log
 
+.sfdx/
+.vscode/
+
 .DS_Store

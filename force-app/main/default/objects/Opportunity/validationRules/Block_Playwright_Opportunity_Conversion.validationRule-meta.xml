@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Block_Playwright_Opportunity_Conversion</fullName>
+    <active>true</active>
+    <description>Blocks creation of the Playwright failure-condition Opportunity.</description>
+    <errorConditionFormula>AND(ISNEW(), BEGINS(Name, "PW-FAIL-"))</errorConditionFormula>
+    <errorMessage>Playwright failure condition: Opportunity creation is blocked.</errorMessage>
+</ValidationRule>

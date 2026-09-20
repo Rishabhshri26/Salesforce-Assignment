@@ -33,18 +33,58 @@ export class LeadPage {
     ).toBeVisible();
   }
 
- async confirmConversion(): Promise<void> {
-    await this.page
-  .getByRole('button', { name: 'Convert', exact: true })
-  .last()
-  .click();
+async confirmConversion(): Promise<void> {
+  const convertButtons = this.page.getByRole('button', {
+    name: 'Convert',
+    exact: true,
+  });
+
+  await expect.poll(
+    async () => {
+      const count = await convertButtons.count();
+
+      for (let index = 0; index < count; index++) {
+        const button = convertButtons.nth(index);
+
+        if (
+          await button.isVisible() &&
+          await button.isEnabled()
+        ) {
+          return index;
+        }
+      }
+
+      return -1;
+    },
+    {
+      message: 'A visible and enabled Convert button should be available',
+      timeout: 15000,
+      intervals: [500, 1000, 2000],
+    }
+  ).toBeGreaterThanOrEqual(0);
+
+  const count = await convertButtons.count();
+
+  for (let index = 0; index < count; index++) {
+    const button = convertButtons.nth(index);
+
+    if (
+      await button.isVisible() &&
+      await button.isEnabled()
+    ) {
+      await button.click();
+      break;
+    }
+  }
 
   await expect(
     this.page.getByRole('heading', {
       name: 'Your lead has been converted',
       exact: true,
     })
-  ).toBeVisible({ timeout: 30000 });
+  ).toBeVisible({
+    timeout: 30000,
+  });
 
   await expect(
     this.page.getByRole('heading', {
@@ -80,14 +120,61 @@ async chooseExistingAccount(accountName: string): Promise<void> {
 
   await accountSearch.fill(accountName);
 
-  const accountOption = this.page.getByRole('option', {
-    name: new RegExp(`^${accountName.slice(0, 20)}`),
+  // Salesforce first shows an autocomplete option.
+  const searchOption = this.page
+    .getByRole('option')
+    .filter({
+      hasText: accountName.slice(0, 20),
+    })
+    .first();
+
+  await expect.poll(
+    async () => searchOption.count(),
+    {
+      message: 'Existing Account should appear in Account Search results',
+      timeout: 15000,
+      intervals: [500, 1000, 2000],
+    }
+  ).toBeGreaterThan(0);
+
+  await expect(searchOption).toBeVisible({
+    timeout: 5000,
   });
 
-  await expect(accountOption).toBeVisible({ timeout: 10000 });
-  await accountOption.click();
+  await searchOption.click();
 
-  // The autocomplete option must disappear after the Account is selected.
-  await expect(accountOption).toBeHidden({ timeout: 10000 });
+  // Salesforce opens an Account Results dialog after the search result.
+  await expect(
+    this.page.getByRole('heading', {
+      name: 'Account Results',
+      exact: true,
+    })
+  ).toBeVisible({
+    timeout: 10000,
+  });
+
+  // Select the matching Account from the results table.
+  const accountResult = this.page
+    .getByRole('link')
+    .filter({
+      hasText: accountName.slice(0, 20),
+    })
+    .first();
+
+  await expect(accountResult).toBeVisible({
+    timeout: 10000,
+  });
+
+  await accountResult.click();
+
+  // The Account Results dialog should close after selection.
+  await expect(
+    this.page.getByRole('heading', {
+      name: 'Account Results',
+      exact: true,
+    })
+  ).toBeHidden({
+    timeout: 10000,
+  });
 }
 }

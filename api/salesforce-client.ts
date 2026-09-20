@@ -75,8 +75,10 @@ export class SalesforceClient {
     );
 
     if (!response.ok()) {
+      const errorBody = await response.text();
+
       throw new Error(
-        `Salesforce create ${objectName} failed: HTTP ${response.status()}`
+        `Salesforce create ${objectName} failed: HTTP ${response.status()}\n${errorBody}`
       );
     }
 
@@ -104,12 +106,14 @@ export class SalesforceClient {
       }
     );
 
-    if (!response.ok()) {
-      throw new Error(
-        `Salesforce update ${objectName}/${recordId} failed: HTTP ${response.status()}`
-      );
-    }
+  if (!response.ok()) {
+    const errorBody = await response.text();
+
+    throw new Error(
+      `Salesforce update ${objectName}/${recordId} failed: HTTP ${response.status()}\n${errorBody}`
+    );
   }
+    }
 
   async delete(
   objectName: string,
