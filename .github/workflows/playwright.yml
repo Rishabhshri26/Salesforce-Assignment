@@ -36,9 +36,9 @@ jobs:
           SF_SFDX_AUTH_URL: ${{ secrets.SF_SFDX_AUTH_URL }}
         run: |
           printf '%s' "$SF_SFDX_AUTH_URL" |
-            npx sf org login sfdx-url \
-              --sfdx-url-stdin \
-              --alias "$SF_TARGET_ORG"
+  	    npx sf org login sfdx-url \
+    	      --sfdx-url-stdin - \
+    	      --alias "$SF_TARGET_ORG"
 
       - name: Deploy Salesforce metadata
         run: |
@@ -83,10 +83,10 @@ jobs:
 
       - name: Authenticate Salesforce CLI
         run: |
-          printf '%s' "$SF_SFDX_AUTH_URL" |
-            npx sf org login sfdx-url \
-              --sfdx-url-stdin \
-              --alias "$SF_TARGET_ORG"
+	printf '%s' "$SF_SFDX_AUTH_URL" |
+  	  npx sf org login sfdx-url \
+    	    --sfdx-url-stdin - \
+    	    --alias "$SF_TARGET_ORG"
 
       - name: Run Playwright shard
         run: |
