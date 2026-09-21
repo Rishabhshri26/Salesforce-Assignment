@@ -85,13 +85,18 @@ jobs:
           npm test -- \
             --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
 
+      - name: Verify blob report
+        run: |
+          test -d blob-report
+          test -n "$(find blob-report -type f -name '*.zip' -print -quit)"
+
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: blob-report-${{ matrix.shardIndex }}
           path: blob-report
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 3
 
       - name: Upload failure artifacts
@@ -129,6 +134,11 @@ jobs:
           pattern: blob-report-*
           path: all-blob-reports
           merge-multiple: true
+
+      - name: Verify downloaded blob reports
+        run: |
+          test -d all-blob-reports
+          test -n "$(find all-blob-reports -type f -name '*.zip' -print -quit)"
 
       - name: Merge reports
         run: |

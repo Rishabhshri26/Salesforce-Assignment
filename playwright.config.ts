@@ -14,10 +14,12 @@ export default defineConfig({
 
   workers: process.env.CI ? 2 : undefined,
 
-  reporter: [
-    ['list'],
-    ['html', { open: 'never' }],
-  ],
+  reporter: process.env.CI
+    ? [['blob', { outputDir: 'blob-report' }]]
+    : [
+        ['list'],
+        ['html', { open: 'never' }],
+      ],
 
   use: {
     trace: 'retain-on-failure',
