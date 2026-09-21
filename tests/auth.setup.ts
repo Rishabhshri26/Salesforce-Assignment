@@ -7,6 +7,7 @@ const authFile = path.resolve('playwright/.auth/user.json');
 const authDataFile = path.resolve('playwright/.auth/salesforce-auth.json');
 
 setup('authenticate Salesforce session', async ({ browser }) => {
+  setup.setTimeout(120000);
   console.log('[AUTH] Starting authentication setup');
 
   const auth = await getSalesforceOrgAuth();

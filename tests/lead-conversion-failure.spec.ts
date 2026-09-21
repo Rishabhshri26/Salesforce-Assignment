@@ -1,5 +1,8 @@
 import { test, expect } from '../fixtures/test-fixtures';
-import { createAccount } from '../api/record-api';
+import {
+  createAccount,
+  findOpportunitiesByName,
+} from '../api/record-api';
 import { getSalesforceOrgDetails } from '../utils/salesforce-cli';
 import { uniqueValue } from '../utils/test-data';
 
@@ -13,7 +16,6 @@ test('blocks Opportunity creation under the validation rule', async ({
   const accountName = uniqueValue('PW-3.4-Account');
   const opportunityName = uniqueValue('PW-FAIL-Opportunity');
 
-  // Arrange: create the Account through the API.
   const account = await createAccount(
     salesforceClient,
     accountName
@@ -23,97 +25,112 @@ test('blocks Opportunity creation under the validation rule', async ({
 
   const { instanceUrl } = await getSalesforceOrgDetails();
 
-  // Open the Account in Salesforce UI.
   await page.goto(
     `${instanceUrl}/lightning/r/Account/${account.Id}/view`,
-    { waitUntil: 'commit' }
+    {
+      waitUntil: 'commit',
+    }
   );
 
-  // Open New Opportunity from the Opportunities related list.
   await page
     .getByRole('article', { name: 'Opportunities' })
     .getByRole('button', { name: 'New' })
     .click();
 
-  // Fill the Opportunity creation form.
   await page
-    .getByRole('textbox', {
-      name: 'Opportunity Name',
-    })
+    .getByRole('textbox', { name: 'Opportunity Name' })
     .fill(opportunityName);
 
   await page
-    .getByRole('spinbutton', {
-      name: 'Amount',
-    })
+    .getByRole('spinbutton', { name: 'Amount' })
     .fill('75000');
 
   await page
-    .getByRole('textbox', {
-      name: 'Close Date',
-    })
+    .getByRole('textbox', { name: 'Close Date' })
     .fill('12/31/2026');
 
   const stageField = page.getByRole('combobox', {
-  name: 'Stage',
-});
+    name: 'Stage',
+  });
 
-await stageField.click();
+  await expect(stageField).toBeVisible({
+    timeout: 10000,
+  });
 
-const stageListbox = page.locator(
-  '[role="listbox"]:visible'
-);
+  await stageField.click();
 
-await expect(stageListbox).toHaveCount(1, {
-  timeout: 10000,
-});
+  const stageListbox = page.locator(
+    '[role="listbox"]:visible'
+  );
 
-const stageOption = stageListbox.getByRole('option', {
-  name: 'Qualification',
-  exact: true,
-});
+  await expect(stageListbox).toHaveCount(1, {
+    timeout: 10000,
+  });
 
-await expect(stageOption).toBeVisible({
-  timeout: 10000,
-});
+  const stageOption = stageListbox.getByRole('option', {
+    name: 'Qualification',
+    exact: true,
+  });
 
-await stageOption.click();
+  await expect(stageOption).toBeVisible({
+    timeout: 10000,
+  });
 
-  // Trigger the validation rule.
+  /*
+   * Salesforce Lightning exposes the committed picklist value
+   * through the data-value attribute on the combobox button.
+   */
+  await stageOption.click();
+
+  await expect(stageField).toHaveAttribute(
+    'data-value',
+    'Qualification',
+    {
+      timeout: 10000,
+    }
+  );
+
+  await stageField.press('Tab');
+
   await page
-    .getByRole('button', {
-      name: 'Save',
-      exact: true,
-    })
+    .getByRole('button', { name: 'Save', exact: true })
     .click();
 
-  // The Opportunity validation rule must be surfaced to the user.
+  /*
+   * The validation rule should block the Opportunity creation
+   * and expose the configured Salesforce error in the UI.
+   */
   await expect(
     page.getByText(
       'Playwright failure condition: Opportunity creation is blocked.',
-      { exact: true }
+      {
+        exact: true,
+      }
     )
   ).toBeVisible({
     timeout: 15000,
   });
 
-  // Confirm through the API that the Opportunity was not created.
-  await expect.poll(
-    async () => {
-      const result = await salesforceClient.query<{ Id: string }>(
-        `SELECT Id
-         FROM Opportunity
-         WHERE Name = '${opportunityName}'
-         LIMIT 1`
-      );
+  /*
+   * Verify through the Salesforce API that the failed creation
+   * did not persist an Opportunity.
+   */
+  await expect
+    .poll(
+      async () => {
+        const opportunities = await findOpportunitiesByName(
+          salesforceClient,
+          opportunityName
+        );
 
-      return result.records.length;
-    },
-    {
-      message:
-        'Blocked Opportunity must not be persisted in Salesforce',
-      timeout: 15000,
-      intervals: [500, 1000, 2000],
-    }
-  ).toBe(0);
+        return opportunities.length;
+      },
+      {
+        message:
+          'Blocked Opportunity must not be persisted in Salesforce',
+        timeout: 15000,
+        intervals: [500, 1000, 2000],
+      }
+    )
+    .toBe(0);
 });

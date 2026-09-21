@@ -30,6 +30,10 @@ export class OpportunityPage {
       name: 'Stage',
     });
 
+    await expect(stageField).toBeVisible({
+      timeout: 10000,
+    });
+
     await stageField.click();
 
     const stageListbox = this.page.locator(
@@ -51,15 +55,41 @@ export class OpportunityPage {
 
     await stageOption.click();
 
+    /*
+     * Salesforce Lightning exposes the committed picklist value
+     * through the data-value attribute on the combobox button.
+     */
+    await expect(stageField).toHaveAttribute(
+      'data-value',
+      stage,
+      {
+        timeout: 10000,
+      }
+    );
+
+    await stageField.press('Tab');
+
     await this.page
       .getByRole('button', { name: 'Save', exact: true })
       .click();
   }
 
   async advanceToStage(stage: string): Promise<void> {
+    /*
+     * Salesforce Path behavior:
+     *
+     * - Selecting a future stage focuses that stage and shows
+     *   "Mark as Current Stage".
+     * - Selecting the current stage shows
+     *   "Mark Stage as Complete".
+     *
+     * The helper therefore detects which action Salesforce
+     * actually exposes rather than assuming one button label.
+     */
     const stageLink = this.page
       .locator('a')
-      .filter({ hasText: stage });
+      .filter({ hasText: stage })
+      .first();
 
     await expect(stageLink).toBeVisible({
       timeout: 10000,
@@ -72,21 +102,36 @@ export class OpportunityPage {
       exact: true,
     });
 
-    await expect(markCurrentStageButton).toBeVisible({
-      timeout: 10000,
+    const markStageCompleteButton = this.page.getByRole('button', {
+      name: 'Mark Stage as Complete',
+      exact: true,
     });
 
-    await markCurrentStageButton.click();
+    await expect
+      .poll(
+        async () => {
+          if (await markCurrentStageButton.isVisible()) {
+            return 'current';
+          }
 
-    // After promotion, Salesforce changes the action to
-    // "Mark Stage as Complete" for the new current stage.
-    await expect(
-      this.page.getByRole('button', {
-        name: 'Mark Stage as Complete',
-        exact: true,
-      })
-    ).toBeVisible({
-      timeout: 10000,
-    });
+          if (await markStageCompleteButton.isVisible()) {
+            return 'complete';
+          }
+
+          return 'none';
+        },
+        {
+          message: `Salesforce should expose a stage action after selecting "${stage}"`,
+          timeout: 10000,
+          intervals: [250, 500, 1000],
+        }
+      )
+      .not.toBe('none');
+
+    if (await markCurrentStageButton.isVisible()) {
+      await markCurrentStageButton.click();
+    } else {
+      await markStageCompleteButton.click();
+    }
   }
 }

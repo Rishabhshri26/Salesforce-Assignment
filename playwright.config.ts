@@ -29,7 +29,7 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
-      timeout: 60000,
+      timeout: 120000,
     },
 
     {

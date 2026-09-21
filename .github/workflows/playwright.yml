@@ -1,0 +1,153 @@
+name: Salesforce Playwright Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Salesforce Metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      SF_TARGET_ORG: qa-salesforce-dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Authenticate Salesforce CLI
+        env:
+          SF_SFDX_AUTH_URL: ${{ secrets.SF_SFDX_AUTH_URL }}
+        run: |
+          printf '%s' "$SF_SFDX_AUTH_URL" |
+            npx sf org login sfdx-url \
+              --sfdx-url-stdin \
+              --alias "$SF_TARGET_ORG"
+
+      - name: Deploy Salesforce metadata
+        run: |
+          npx sf project deploy start \
+            --source-dir force-app \
+            --target-org "$SF_TARGET_ORG" \
+            --wait 10 \
+            --concise
+
+  playwright-tests:
+    name: Playwright Shard ${{ matrix.shardIndex }}/2
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2]
+        shardTotal: [2]
+
+    env:
+      CI: true
+      SF_TARGET_ORG: qa-salesforce-dev
+      SF_SFDX_AUTH_URL: ${{ secrets.SF_SFDX_AUTH_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Authenticate Salesforce CLI
+        run: |
+          printf '%s' "$SF_SFDX_AUTH_URL" |
+            npx sf org login sfdx-url \
+              --sfdx-url-stdin \
+              --alias "$SF_TARGET_ORG"
+
+      - name: Run Playwright shard
+        run: |
+          npm test -- \
+            --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: blob-report-${{ matrix.shardIndex }}
+          path: blob-report
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Upload failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.shardIndex }}
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  merge-reports:
+    name: Merge Playwright Reports
+    needs: playwright-tests
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download shard reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: blob-report-*
+          path: all-blob-reports
+          merge-multiple: true
+
+      - name: Merge reports
+        run: |
+          npx playwright merge-reports \
+            --reporter html \
+            ./all-blob-reports
+
+      - name: Upload merged HTML report
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-html-report-${{ github.run_attempt }}
+          path: playwright-report
+          if-no-files-found: warn
+          retention-days: 14
