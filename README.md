@@ -17,38 +17,121 @@ Playwright + TypeScript automation for the Top Employers Institute Salesforce QA
 Salesforce CLI authentication
 → Playwright setup project
 → programmatic Salesforce session
-→ reusable storageState
+→ reusable `storageState`
 → UI + Salesforce API tests
 
-A worker-scoped Salesforce API client is shared within each Playwright worker. Test-created Salesforce records are tracked by a fixture and cleaned during teardown.
+Authentication is established once by the Playwright setup project. The resulting browser `storageState` is reused by the test projects, while Salesforce API authentication is shared through a worker-scoped client.
 
-## Scenarios
+A worker-scoped Salesforce API client avoids creating a new API request context for every test while keeping workers isolated. Created Salesforce records are tracked per test and cleaned during fixture teardown.
 
-**3.1 Lead → NEW Account**
+## Setup from scratch
 
-Creates a unique Lead through the API, converts it through the Salesforce UI, then verifies the converted Lead and generated Account, Contact and Opportunity through the API.
+1. Create a Salesforce Developer Edition org with Lead, Account, Contact and Opportunity available.
+2. Install Node.js 24+ and Salesforce CLI.
+3. Set the target org alias: set SF_TARGET_ORG=qa-salesforce-dev
 
-**3.2 Lead → EXISTING Account**
+No Salesforce instance URL, username, org ID or record ID is hard-coded. The target org is selected through `SF_TARGET_ORG`, so the same suite can run against another authorized org without changing test code.
 
-Pre-creates a unique Account through the API, converts a Lead through the UI into that Account, and verifies that no duplicate Account is created.
+4. Authorize the target Salesforce org:
+    npx sf org login web --alias %SF_TARGET_ORG%
 
-**3.3 Opportunity**
+Install dependencies:
+npm ci
+Install Playwright Chromium:
+npx playwright install chromium
+Deploy the Salesforce metadata required by the tests:
+npx sf project deploy start --source-dir force-app --target-org %SF_TARGET_ORG%
+Run the suite:
+npm test
 
-Creates an Opportunity from an Account through the UI, advances it through multiple Salesforce stages, and verifies the final Amount, Stage and Close Date through the API.
+The suite does not perform a Salesforce login through the UI. Authentication is established programmatically during the setup project.
 
-**3.4 Expected failure**
+Scenarios
+3.1 Lead → NEW Account
 
-A Salesforce validation rule blocks creation of an Opportunity whose name begins with `PW-FAIL-`. The test verifies the visible Salesforce validation error and proves through the API that no Opportunity was persisted.
+Creates a unique Lead through the Salesforce API, opens it through the Salesforce UI and converts it into a new Account, Contact and Opportunity.
 
-## Local execution
+The test asserts both sides of the workflow: the user-visible conversion result and the Salesforce API state. The converted Lead is checked for IsConverted and populated ConvertedAccountId, ConvertedContactId and ConvertedOpportunityId, and the generated records are checked against the supplied Lead data.
 
-Prerequisites:
+3.2 Lead → EXISTING Account
 
-- Node.js 24+
-- Salesforce CLI
-- Authenticated Salesforce org
+Creates a unique Account through the API, creates a Lead, and converts the Lead through the Salesforce UI into the existing Account.
 
-Set the target org in Windows CMD:
+The test verifies through the API that the existing Account was reused and that no duplicate Account was created. Unique test data keeps the assertion isolated from parallel workers.
 
-```text
-set SF_TARGET_ORG=qa-salesforce-dev
+3.3 Create and progress an Opportunity
+
+Creates an Opportunity from an Account through the Salesforce UI with a defined amount, stage and close date, then advances it through at least two further stages.
+
+The final Opportunity state is verified through the Salesforce API.
+
+For stage progression, the Salesforce Path and its accessible stage controls are used rather than generated Lightning IDs or internal component class names. This keeps the locator strategy focused on the user-facing Salesforce workflow.
+
+3.4 Expected failure
+
+A version-controlled Salesforce validation rule intentionally blocks creation of Opportunities whose names begin with `PW-FAIL-`.
+
+The test deliberately triggers the rule, verifies that the configured validation error is surfaced in the UI, and then queries Salesforce through the API to prove that the Opportunity was not persisted.
+
+Design decisions
+
+1. API arrange → UI action → API assert
+
+Salesforce data is created through the API where practical, the business workflow is exercised through the UI, and the resulting platform state is verified through the API. This keeps UI automation focused on the user journey while making data assertions precise.
+
+2. Worker-scoped API client + test-scoped cleanup
+
+The Salesforce API client is worker-scoped to avoid repeatedly creating request contexts. Created record IDs are tracked per test and removed during fixture teardown, including records generated by Lead conversion.
+
+3. Durable Salesforce locators
+
+The suite prefers accessible roles, labels and field names rather than generated Lightning IDs or internal CSS classes. Where Salesforce exposes a more reliable user-facing affordance, that affordance is used directly.
+
+3.5 Data lifecycle and isolation
+
+Every created record is registered with the custom Playwright fixture.
+
+Cleanup executes during fixture teardown for both passing and failing tests. Conversion-generated Account, Contact and Opportunity IDs are resolved from the converted Lead before cleanup, and records are deleted in dependency order.
+
+A converted Lead cannot be reverted, so the cleanup strategy treats conversion as irreversible and resolves all generated record IDs before teardown.
+
+All generated Account, Lead and Opportunity values use unique run-specific identifiers, allowing tests to execute in parallel against the same Salesforce org without relying on pre-existing records.
+
+CI
+
+GitHub Actions:
+
+Authenticates Salesforce using the SF_SFDX_AUTH_URL repository secret.
+Deploys the Salesforce metadata from force-app.
+Runs Playwright across two shards in parallel.
+Uploads per-shard blob reports.
+Uploads failure artifacts such as traces, screenshots and test results.
+Merges the shard reports into a single HTML report.
+
+No credentials, Salesforce session state or generated test data are committed to the repository.
+
+Local reporting
+
+Run:
+
+npm run test:report
+
+This opens the Playwright HTML report from the latest local run.
+
+The final local Playwright HTML report is included with the submission artifact.
+
+Cleanup errors are surfaced as test failures and attached as a `cleanup-errors` artifact so leaked data is not silently ignored.
+
+Known gaps
+Scenario 3.6, the owner and permission-boundary stretch scenario, is not implemented.
+The suite assumes the standard Salesforce Lead, Account, Contact and Opportunity objects and the standard Lightning workflow are available.
+CI requires the evaluator to provide a valid Salesforce authorization secret.
+With another two days
+
+I would implement the 3.6 permission-boundary scenario, add a dedicated failure-path cleanup test, and strengthen CI coverage for shuffled test-file order and repeated multi-worker execution against a shared org.
+
+Repository hygiene
+
+The repository ignores credentials, Salesforce CLI state, browser authentication state, Playwright reports, test results and editor-specific files.
+
+The Salesforce configuration required by the tests is versioned under force-app and can be deployed with the Salesforce CLI command shown above.
