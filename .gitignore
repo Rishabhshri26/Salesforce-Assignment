@@ -17,3 +17,5 @@ playwright/.auth/
 .vscode/
 
 .DS_Store
+
+Salesforce-Playwright-Local-Report.zip
