@@ -5,6 +5,7 @@ import {
 } from '../api/record-api';
 import { getSalesforceOrgDetails } from '../utils/salesforce-cli';
 import { uniqueValue } from '../utils/test-data';
+import { OpportunityPage } from '../pages/opportunity-page';
 
 test('blocks Opportunity creation under the validation rule', async ({
   page,
@@ -32,73 +33,23 @@ test('blocks Opportunity creation under the validation rule', async ({
     }
   );
 
-  await page
-    .getByRole('article', { name: 'Opportunities' })
-    .getByRole('button', { name: 'New' })
-    .click();
-
-  await page
-    .getByRole('textbox', { name: 'Opportunity Name' })
-    .fill(opportunityName);
-
-  await page
-    .getByRole('spinbutton', { name: 'Amount' })
-    .fill('75000');
-
-  await page
-    .getByRole('textbox', { name: 'Close Date' })
-    .fill('12/31/2026');
-
-  const stageField = page.getByRole('combobox', {
-    name: 'Stage',
-  });
-
-  await expect(stageField).toBeVisible({
-    timeout: 10000,
-  });
-
-  await stageField.click();
-
-  const stageListbox = page.locator(
-    '[role="listbox"]:visible'
-  );
-
-  await expect(stageListbox).toHaveCount(1, {
-    timeout: 10000,
-  });
-
-  const stageOption = stageListbox.getByRole('option', {
-    name: 'Qualification',
-    exact: true,
-  });
-
-  await expect(stageOption).toBeVisible({
-    timeout: 10000,
-  });
+  const opportunityPage = new OpportunityPage(page);
 
   /*
-   * Salesforce Lightning exposes the committed picklist value
-   * through the data-value attribute on the combobox button.
+   * Reuse the same Salesforce Opportunity creation interaction as
+   * the positive Opportunity scenario, including the resilient
+   * Stage selection.
    */
-  await stageOption.click();
-
-  await expect(stageField).toHaveAttribute(
-    'data-value',
-    'Qualification',
-    {
-      timeout: 10000,
-    }
+  await opportunityPage.createOpportunity(
+    opportunityName,
+    75000,
+    '12/31/2026',
+    'Qualification'
   );
 
-  await stageField.press('Tab');
-
-  await page
-    .getByRole('button', { name: 'Save', exact: true })
-    .click();
-
   /*
-   * The validation rule should block the Opportunity creation
-   * and expose the configured Salesforce error in the UI.
+   * The save must be blocked by the validation rule. The expected
+   * Salesforce error must be visible to the user.
    */
   await expect(
     page.getByText(
@@ -112,8 +63,8 @@ test('blocks Opportunity creation under the validation rule', async ({
   });
 
   /*
-   * Verify through the Salesforce API that the failed creation
-   * did not persist an Opportunity.
+   * Prove through the Salesforce API that no Opportunity was
+   * persisted despite the attempted UI save.
    */
   await expect
     .poll(
