@@ -36,12 +36,19 @@ No Salesforce instance URL, username, org ID or record ID is hard-coded. The tar
     npx sf org login web --alias %SF_TARGET_ORG%
 
 Install dependencies:
+
 npm ci
+
 Install Playwright Chromium:
+
 npx playwright install chromium
+
 Deploy the Salesforce metadata required by the tests:
+
 npx sf project deploy start --source-dir force-app --target-org %SF_TARGET_ORG%
+
 Run the suite:
+
 npm test
 
 The suite does not perform a Salesforce login through the UI. Authentication is established programmatically during the setup project.
